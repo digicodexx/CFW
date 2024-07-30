@@ -1027,13 +1027,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
     } = proxySettings;
 
     const resolved = await resolveDNS(hostName);
-    const Addresses = [
-        hostName,
-        "www.speedtest.net",
-        ...resolved.ipv4,
-        ...resolved.ipv6.map((ip) => `[${ip}]`),
-        ...(cleanIPs ? cleanIPs.split(",") : [])
-    ];
+    const Addresses = cleanIPs ? cleanIPs.split(",") : [];
 
     if (outProxy) {
         const proxyParams = JSON.parse(outProxyParams);
@@ -1204,13 +1198,7 @@ const getSingboxConfig = async (env, hostName) => {
     config.dns.servers[0].address = remoteDNS;
     config.dns.servers[1].address = localDNS;
     const resolved = await resolveDNS(hostName);
-    const Addresses = [
-        hostName,
-        "www.speedtest.net",
-        ...resolved.ipv4,
-        ...resolved.ipv6.map((ip) => `[${ip}]`),
-        ...(cleanIPs ? cleanIPs.split(",") : [])
-    ];
+    const Addresses = cleanIPs ? cleanIPs.split(",") : [];
 
     ports.forEach(port => {
         Addresses.forEach((addr, index) => {
