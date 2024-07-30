@@ -4,7 +4,6 @@
 // https://github.com/bia-pain-bache/BPB-Worker-Panel
 
 import { connect } from 'cloudflare:sockets';
-import net from 'net';
 // How to generate your own UUID:
 // https://www.uuidgenerator.net/
 let userID = 'b5d3587c-1117-4786-96c1-b7ec99383ad3';
@@ -222,31 +221,10 @@ export default {
  * @returns {Promise<Response>} A Promise that resolves to a WebSocket response object.
  */
 
-const net = require('net');
-
-function createOptimizedTCPConnection(options) {
-    const socket = connect(options);
-    socket.setNoDelay(true); // Disable Nagle's algorithm
-    socket.setKeepAlive(true, 60000); // Enable keep-alive with 60s interval
-    
-    // Set a larger receive buffer
-    socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024);
-    
-    return socket;
-}
-
-
-const net = require('net');
-
-function createOptimizedTCPConnection(options) {
-    const socket = new net.Socket();
-    socket.setNoDelay(true); // Disable Nagle's algorithm
-    socket.setKeepAlive(true, 60000); // Enable keep-alive with 60s interval
-    
-    // Set a larger receive buffer
-    socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024 * 1024);
-    
-    socket.connect(options);
+async function createOptimizedTCPConnection(options) {
+    const socket = await connect(options);
+    // Note: Cloudflare's connect function doesn't support the same options as Node.js net.Socket
+    // So we'll remove the unsupported options
     return socket;
 }
 
@@ -372,15 +350,15 @@ async function handleTCPOutBound(request, remoteSocket, addressRemote, portRemot
 	 * @param {number} port The port to connect to.
 	 * @returns {Promise<import("@cloudflare/workers-types").Socket>} A Promise that resolves to the connected socket.
 	 */
-	async function connectAndWrite(address, port) {
-        const tcpSocket = createOptimizedTCPConnection({
+    async function connectAndWrite(address, port) {
+        const tcpSocket = await connect({
             hostname: address,
             port: port,
         });
         remoteSocket.value = tcpSocket;
         log(`connected to ${address}:${port}`);
         const writer = tcpSocket.writable.getWriter();
-        await writer.write(rawClientData); // first write, normal is tls client hello
+        await writer.write(rawClientData);
         writer.releaseLock();
         return tcpSocket;
     }
