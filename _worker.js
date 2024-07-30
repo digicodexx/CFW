@@ -806,7 +806,7 @@ const getNormalConfigs = async (env, hostName, client) => {
                         client === 'singbox' 
                             ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
                             : encodeURIComponent('?ed=2560')
-                    }#${encodeURIComponent(generateRemark(index + 5, port))}\n`;
+                    }#${encodeURIComponent(generateRemark(index + 1, port))}\n`;
         });
     });
 
@@ -838,7 +838,7 @@ const getNormalConfigs = async (env, hostName, client) => {
 // }
 
 const generateRemark = (index, port) => {
-    return `💦 BPB - Clean IP_${index - 5} : ${port}`;
+    return `💦 BPB - Clean IP_${index + 1} : ${port}`;
 }
 
 
