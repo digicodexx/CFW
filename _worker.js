@@ -4,9 +4,10 @@
 // https://github.com/bia-pain-bache/BPB-Worker-Panel
 
 import { connect } from 'cloudflare:sockets';
+
 // How to generate your own UUID:
 // https://www.uuidgenerator.net/
-let userID = 'b5d3587c-1117-4786-96c1-b7ec99383ad3';
+let userID = '89b3cbba-e6ac-485a-9481-976a0415eab9';
 
 // https://www.nslookup.io/domains/cdn.xn--b6gac.eu.org/dns-records/
 // https://www.nslookup.io/domains/cdn-all.xn--b6gac.eu.org/dns-records/
@@ -220,28 +221,10 @@ export default {
  * @param {import("@cloudflare/workers-types").Request} request The incoming request object.
  * @returns {Promise<Response>} A Promise that resolves to a WebSocket response object.
  */
-
-async function createOptimizedTCPConnection(options) {
-    const socket = await connect(options);
-    // Note: Cloudflare's connect function doesn't support the same options as Node.js net.Socket
-    // So we'll remove the unsupported options
-    return socket;
-}
-
-
-
-
 async function vlessOverWSHandler(request) {
 	const webSocketPair = new WebSocketPair();
 	const [client, webSocket] = Object.values(webSocketPair);
 	webSocket.accept();
-
-    // ? Increase the WebSocket frame size for better performance
-    webSocket.binaryType = "arraybuffer";
-    
-    /// ? Set a larger buffer size for WebSocket
-    webSocket.bufferedAmount = 1024 * 1024; // 1MB buffer
-
 
 	let address = '';
 	let portWithRandomLog = '';
@@ -350,18 +333,19 @@ async function handleTCPOutBound(request, remoteSocket, addressRemote, portRemot
 	 * @param {number} port The port to connect to.
 	 * @returns {Promise<import("@cloudflare/workers-types").Socket>} A Promise that resolves to the connected socket.
 	 */
-    async function connectAndWrite(address, port) {
-        const tcpSocket = await connect({
-            hostname: address,
-            port: port,
-        });
-        remoteSocket.value = tcpSocket;
-        log(`connected to ${address}:${port}`);
-        const writer = tcpSocket.writable.getWriter();
-        await writer.write(rawClientData);
-        writer.releaseLock();
-        return tcpSocket;
-    }
+	async function connectAndWrite(address, port) {
+		/** @type {import("@cloudflare/workers-types").Socket} */
+		const tcpSocket = connect({
+			hostname: address,
+			port: port,
+		});
+		remoteSocket.value = tcpSocket;
+		log(`connected to ${address}:${port}`);
+		const writer = tcpSocket.writable.getWriter();
+		await writer.write(rawClientData); // first write, nomal is tls client hello
+		writer.releaseLock();
+		return tcpSocket;
+	}
 
 	/**
 	 * Retries connecting to the remote address and port if the Cloudflare socket has no incoming data.
@@ -723,37 +707,26 @@ function stringify(arr, offset = 0) {
 async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
 
 	let isVlessHeaderSent = false;
-
-    const udpQueue = [];
-    const MAX_UDP_PACKET_SIZE = 65507; // Maximum UDP packet size
-
 	const transformStream = new TransformStream({
-        transform(chunk, controller) {
-            // Process UDP packets
-            for (let index = 0; index < chunk.byteLength;) {
-                const lengthBuffer = chunk.slice(index, index + 2);
-                const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
-                
-                if (udpPacketLength > MAX_UDP_PACKET_SIZE) {
-                    log(`UDP packet too large: ${udpPacketLength} bytes`);
-                    index += 2 + udpPacketLength;
-                    continue;
-                }
-                
-                const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPacketLength));
-                udpQueue.push(udpData);
-                index = index + 2 + udpPacketLength;
-            }
-        },
-        flush(controller) {
-            // Process any remaining UDP packets in the queue
-            while (udpQueue.length > 0) {
-                const udpData = udpQueue.shift();
-                controller.enqueue(udpData);
-            }
-        }
-    });
+		start(controller) {
 
+		},
+		transform(chunk, controller) {
+			// udp message 2 byte is the the length of udp data
+			// TODO: this should have bug, beacsue maybe udp chunk can be in two websocket message
+			for (let index = 0; index < chunk.byteLength;) {
+				const lengthBuffer = chunk.slice(index, index + 2);
+				const udpPakcetLength = new DataView(lengthBuffer).getUint16(0);
+				const udpData = new Uint8Array(
+					chunk.slice(index + 2, index + 2 + udpPakcetLength)
+				);
+				index = index + 2 + udpPakcetLength;
+				controller.enqueue(udpData);
+			}
+		},
+		flush(controller) {
+		}
+	});
 
 	// only handle dns udp for now
 	transformStream.readable.pipeTo(new WritableStream({
