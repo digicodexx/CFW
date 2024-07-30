@@ -789,18 +789,11 @@ const getNormalConfigs = async (env, hostName, client) => {
     }
 
     const { cleanIPs, proxyIP, ports } = proxySettings;
-    const resolved = await resolveDNS(hostName);
-    const Addresses = [
-        hostName,
-        'www.speedtest.net',
-        ...resolved.ipv4,
-        ...resolved.ipv6.map((ip) => `[${ip}]`),
-        ...(cleanIPs ? cleanIPs.split(',') : [])
-    ];
+    // Only use cleanIPs for Addresses
+    const Addresses = cleanIPs ? cleanIPs.split(',') : [];
 
     ports.forEach(port => {
         Addresses.forEach((addr, index) => {
-
             vlessWsTls += 'vless' + `://${userID}@${addr}:${port}?encryption=none&type=ws&host=${
                 randomUpperCase(hostName)}${
                 defaultHttpsPorts.includes(port) 
@@ -813,9 +806,10 @@ const getNormalConfigs = async (env, hostName, client) => {
                         client === 'singbox' 
                             ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
                             : encodeURIComponent('?ed=2560')
-                    }#${encodeURIComponent(generateRemark(index, port))}\n`;
+                    }#${encodeURIComponent(generateRemark(index + 5, port))}\n`;
         });
     });
+
 
     return btoa(vlessWsTls);
 }
