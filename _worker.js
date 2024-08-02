@@ -62,8 +62,8 @@ export default {
                             status: 200,
                             headers: { 'Content-Type': 'application/json' }
                         });
+                        
     
-
                     case `/fragsub/${userID}`:
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
                         fragConfigs = fragConfigs.map(config => config.config);
@@ -826,55 +826,102 @@ const getLoadBalanceConfigs = async (env, hostName) => {
 
     ports.forEach(port => {
         let normalConfig = {
-            tag: `💦 CFW LB - PORT ${port} 🚀`,
-            outbounds: []
+            log: {
+                loglevel: "warning"
+            },
+            inbounds: [
+                {
+                    port: 10808,
+                    protocol: "socks",
+                    settings: {
+                        auth: "noauth",
+                        udp: true
+                    }
+                },
+                {
+                    port: 10809,
+                    protocol: "http"
+                }
+            ],
+            outbounds: [
+                {
+                    protocol: "vless",
+                    settings: {
+                        vnext: []
+                    },
+                    streamSettings: {
+                        network: "ws",
+                        security: defaultHttpsPorts.includes(port) ? "tls" : "none",
+                        tlsSettings: defaultHttpsPorts.includes(port) ? {
+                            serverName: randomUpperCase(hostName),
+                            alpn: ["h2", "http/1.1"],
+                            fingerprint: "randomized"
+                        } : undefined,
+                        wsSettings: {
+                            path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
+                            headers: { Host: randomUpperCase(hostName) }
+                        }
+                    },
+                    tag: "proxy"
+                },
+                {
+                    protocol: "freedom",
+                    tag: "direct"
+                },
+                {
+                    protocol: "blackhole",
+                    tag: "block"
+                }
+            ],
+            routing: {
+                domainStrategy: "AsIs",
+                rules: [
+                    {
+                        type: "field",
+                        ip: ["geoip:private"],
+                        outboundTag: "direct"
+                    },
+                    {
+                        type: "field",
+                        domain: ["geosite:category-ads-all"],
+                        outboundTag: "block"
+                    }
+                ]
+            }
         };
-        let fragConfig = {
-            tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
-            outbounds: []
+
+        let fragConfig = JSON.parse(JSON.stringify(normalConfig));
+        fragConfig.outbounds[0].settings.fragment = {
+            packets: "tlshello",
+            length: "100-200",
+            interval: "5-10"
         };
 
         Addresses.forEach((addr, index) => {
             let outbound = {
-                protocol: "vless",
-                settings: {
-                    vnext: [{
-                        address: addr,
-                        port: parseInt(port),
-                        users: [{ id: userID, encryption: "none" }]
-                    }]
-                },
-                streamSettings: {
-                    network: "ws",
-                    security: defaultHttpsPorts.includes(port) ? "tls" : "none",
-                    tlsSettings: defaultHttpsPorts.includes(port) ? {
-                        serverName: randomUpperCase(hostName),
-                        alpn: ["h2", "http/1.1"],
-                        fingerprint: "randomized"
-                    } : undefined,
-                    wsSettings: {
-                        path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
-                        headers: { Host: randomUpperCase(hostName) }
-                    }
-                },
-                tag: `server${index + 1}`
+                address: addr,
+                port: parseInt(port),
+                users: [{ id: userID, encryption: "none" }]
             };
-            normalConfig.outbounds.push(outbound);
-            
-            let fragOutbound = JSON.parse(JSON.stringify(outbound));
-            fragOutbound.settings.fragment = {
-                packets: "tlshello",
-                length: "100-200",
-                interval: "5-10"
-            };
-            fragConfig.outbounds.push(fragOutbound);
+            normalConfig.outbounds[0].settings.vnext.push(outbound);
+            fragConfig.outbounds[0].settings.vnext.push(outbound);
         });
 
-        balancerConfigs.push(normalConfig, fragConfig);
+        balancerConfigs.push(
+            {
+                tag: `💦 CFW LB - PORT ${port} 🚀`,
+                config: normalConfig
+            },
+            {
+                tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
+                config: fragConfig
+            }
+        );
     });
 
     return balancerConfigs;
 }
+
 
 
 
