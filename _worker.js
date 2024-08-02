@@ -218,96 +218,101 @@ export default {
  * @returns {Promise<Response>} A Promise that resolves to a WebSocket response object.
  */
 async function vlessOverWSHandler(request) {
-	const webSocketPair = new WebSocketPair();
-	const [client, webSocket] = Object.values(webSocketPair);
-	webSocket.accept();
+    const webSocketPair = new WebSocketPair();
+    const [client, webSocket] = Object.values(webSocketPair);
+    webSocket.accept();
 
-	let address = '';
-	let portWithRandomLog = '';
-	let currentDate = new Date();
-	const log = (/** @type {string} */ info, /** @type {string | undefined} */ event) => {
-		console.log(`[${currentDate} ${address}:${portWithRandomLog}] ${info}`, event || '');
-	};
-	const earlyDataHeader = request.headers.get('sec-websocket-protocol') || '';
+    let address = '';
+    let portWithRandomLog = '';
+    let currentDate = new Date();
+    const log = (/** @type {string} */ info, /** @type {string | undefined} */ event) => {
+        console.log(`[${currentDate} ${address}:${portWithRandomLog}] ${info}`, event || '');
+    };
+    const earlyDataHeader = request.headers.get('sec-websocket-protocol') || '';
 
-	const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
+    const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
 
-	/** @type {{ value: import("@cloudflare/workers-types").Socket | null}}*/
-	let remoteSocketWapper = {
-		value: null,
-	};
-	let udpStreamWrite = null;
-	let isDns = false;
+    /** @type {{ value: import("@cloudflare/workers-types").Socket | null}}*/
+    let remoteSocketWapper = {
+        value: null,
+    };
+    let udpStreamWrite = null;
+    let isDns = false;
 
-	// ws --> remote
-	readableWebSocketStream.pipeTo(new WritableStream({
-		async write(chunk, controller) {
-			if (isDns && udpStreamWrite) {
-				return udpStreamWrite(chunk);
-			}
-			if (remoteSocketWapper.value) {
-				const writer = remoteSocketWapper.value.writable.getWriter()
-				await writer.write(chunk);
-				writer.releaseLock();
-				return;
-			}
+    // ws --> remote
+    readableWebSocketStream.pipeTo(new WritableStream({
+        async write(chunk, controller) {
+            if (isDns && udpStreamWrite) {
+                return udpStreamWrite(chunk);
+            }
+            if (remoteSocketWapper.value) {
+                const writer = remoteSocketWapper.value.writable.getWriter()
+                await writer.write(chunk);
+                writer.releaseLock();
+                return;
+            }
 
-			const {
-				hasError,
-				message,
-				portRemote = 443,
-				addressRemote = '',
-				rawDataIndex,
-				vlessVersion = new Uint8Array([0, 0]),
-				isUDP,
-			} = processVlessHeader(chunk, userID);
-			address = addressRemote;
-			portWithRandomLog = `${portRemote} ${isUDP ? 'udp' : 'tcp'} `;
-			if (hasError) {
-				// controller.error(message);
-				throw new Error(message); // cf seems has bug, controller.error will not end stream
-				// webSocket.close(1000, message);
-				return;
-			}
+            const {
+                hasError,
+                message,
+                portRemote = 443,
+                addressRemote = '',
+                rawDataIndex,
+                vlessVersion = new Uint8Array([0, 0]),
+                isUDP,
+            } = processVlessHeader(chunk, userID);
+            address = addressRemote;
+            portWithRandomLog = `${portRemote} ${isUDP ? 'udp' : 'tcp'} `;
+            if (hasError) {
+                throw new Error(message);
+            }
 
-			// If UDP and not DNS port, close it
-			if (isUDP && portRemote !== 53) {
-				throw new Error('UDP proxy only enabled for DNS which is port 53');
-				// cf seems has bug, controller.error will not end stream
-			}
+            // If UDP and not DNS port, close it
+            if (isUDP && portRemote !== 53) {
+                throw new Error('UDP proxy only enabled for DNS which is port 53');
+            }
 
-			if (isUDP && portRemote === 53) {
-				isDns = true;
-			}
+            if (isUDP && portRemote === 53) {
+                isDns = true;
+            }
 
-			// ["version", "附加信息长度 N"]
-			const vlessResponseHeader = new Uint8Array([vlessVersion[0], 0]);
-			const rawClientData = chunk.slice(rawDataIndex);
+            // ["version", "附加信息长度 N"]
+            const vlessResponseHeader = new Uint8Array([vlessVersion[0], 0]);
+            const rawClientData = chunk.slice(rawDataIndex);
 
-			// TODO: support udp here when cf runtime has udp support
-			if (isDns) {
-				const { write } = await handleUDPOutBound(webSocket, vlessResponseHeader, log);
-				udpStreamWrite = write;
-				udpStreamWrite(rawClientData);
-				return;
-			}
-			handleTCPOutBound(request, remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log);
-		},
-		close() {
-			log(`readableWebSocketStream is close`);
-		},
-		abort(reason) {
-			log(`readableWebSocketStream is abort`, JSON.stringify(reason));
-		},
-	})).catch((err) => {
-		log('readableWebSocketStream pipeTo error', err);
-	});
+            // TODO: support udp here when cf runtime has udp support
+            if (isDns) {
+                const { write } = await handleUDPOutBound(webSocket, vlessResponseHeader, log);
+                udpStreamWrite = write;
+                udpStreamWrite(rawClientData);
+                return;
+            }
 
-	return new Response(null, {
-		status: 101,
-		webSocket: client,
-	});
+            // Check if it's a load balancer request
+            const isLoadBalancer = request.url.includes('/loadbalancer/');
+            
+            if (isLoadBalancer) {
+                await handleLoadBalancerOutBound(request, remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log);
+            } else {
+                await handleTCPOutBound(request, remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log);
+            }
+        },
+        close() {
+            log(`readableWebSocketStream is close`);
+        },
+        abort(reason) {
+            log(`readableWebSocketStream is abort`, JSON.stringify(reason));
+        },
+    })).catch((err) => {
+        log('readableWebSocketStream pipeTo error', err);
+    });
+
+    return new Response(null, {
+        status: 101,
+        webSocket: client,
+    });
 }
+
 
 /**
  * Handles outbound TCP connections.
@@ -810,6 +815,50 @@ const getNormalConfigs = async (env, hostName, client) => {
 
     return btoa(vlessWsTls);
 }
+
+
+async function handleLoadBalancerOutBound(request, remoteSocket, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log) {
+    const loadBalancerConfig = await getLoadBalancerConfigs(env, hostName, 'v2ray');
+    const outbounds = loadBalancerConfig[0].outbounds.filter(outbound => outbound.protocol === 'vless');
+    
+    let connectedSocket = null;
+    let retryCount = 0;
+    const maxRetries = outbounds.length;
+
+    while (retryCount < maxRetries && !connectedSocket) {
+        const outbound = outbounds[retryCount];
+        try {
+            const tcpSocket = await connectAndWrite(outbound.settings.vnext[0].address, outbound.settings.vnext[0].port);
+            connectedSocket = tcpSocket;
+            break;
+        } catch (error) {
+            console.error(`Failed to connect to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`, error);
+            retryCount++;
+        }
+    }
+
+    if (!connectedSocket) {
+        throw new Error('Failed to connect to any outbound server');
+    }
+
+    remoteSocket.value = connectedSocket;
+    
+    // When remoteSocket is ready, pass to websocket
+    remoteSocketToWS(connectedSocket, webSocket, vlessResponseHeader, null, log);
+
+    async function connectAndWrite(address, port) {
+        const tcpSocket = connect({
+            hostname: address,
+            port: port,
+        });
+        log(`connected to ${address}:${port}`);
+        const writer = tcpSocket.writable.getWriter();
+        await writer.write(rawClientData);
+        writer.releaseLock();
+        return tcpSocket;
+    }
+}
+
 
 
 const getLoadBalancerConfigs = async (env, hostName, client) => {
