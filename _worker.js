@@ -853,10 +853,14 @@ const getLoadBalancerConfigs = async (env, hostName, client) => {
         });
     });
 
-    balancerConfigs.push(loadBalancerConfig);
+    balancerConfigs.push({
+        name: "💦 BPB - Load Balancer 🚀",
+        config: loadBalancerConfig
+    });
 
     return balancerConfigs;
 }
+
 
 
 // const generateRemark = (index, port) => {
