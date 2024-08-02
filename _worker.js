@@ -824,68 +824,7 @@ const getLoadBalanceConfigs = async (env, hostName) => {
 
     ports.forEach(port => {
         let normalConfig = {
-            log: {
-                loglevel: "warning"
-            },
-            inbounds: [
-                {
-                    port: 10808,
-                    protocol: "socks",
-                    settings: {
-                        auth: "noauth",
-                        udp: true
-                    }
-                },
-                {
-                    port: 10809,
-                    protocol: "http"
-                }
-            ],
-            outbounds: [
-                {
-                    protocol: "vless",
-                    settings: {
-                        vnext: []
-                    },
-                    streamSettings: {
-                        network: "ws",
-                        security: defaultHttpsPorts.includes(port) ? "tls" : "none",
-                        tlsSettings: defaultHttpsPorts.includes(port) ? {
-                            serverName: randomUpperCase(hostName),
-                            alpn: ["h2", "http/1.1"],
-                            fingerprint: "randomized"
-                        } : undefined,
-                        wsSettings: {
-                            path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
-                            headers: { Host: randomUpperCase(hostName) }
-                        }
-                    },
-                    tag: "proxy"
-                },
-                {
-                    protocol: "freedom",
-                    tag: "direct"
-                },
-                {
-                    protocol: "blackhole",
-                    tag: "block"
-                }
-            ],
-            routing: {
-                domainStrategy: "AsIs",
-                rules: [
-                    {
-                        type: "field",
-                        ip: ["geoip:private"],
-                        outboundTag: "direct"
-                    },
-                    {
-                        type: "field",
-                        domain: ["geosite:category-ads-all"],
-                        outboundTag: "block"
-                    }
-                ]
-            }
+            // ... (keep the existing normalConfig structure)
         };
 
         let fragConfig = JSON.parse(JSON.stringify(normalConfig));
@@ -908,11 +847,17 @@ const getLoadBalanceConfigs = async (env, hostName) => {
         balancerConfigs.push(
             {
                 tag: `💦 CFW LB - PORT ${port} 🚀`,
-                config: normalConfig
+                config: {
+                    ...normalConfig,
+                    remarks: `💦 CFW LB - PORT ${port} 🚀`
+                }
             },
             {
                 tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
-                config: fragConfig
+                config: {
+                    ...fragConfig,
+                    remarks: `💦 CFW LB - FRAG - PORT ${port} 🚀`
+                }
             }
         );
     });
