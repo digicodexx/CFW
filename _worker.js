@@ -58,17 +58,18 @@ export default {
 
                     case `/balancersub/${userID}`:
                         const balancerConfigs = await getLoadBalanceConfigs(env, host);
-                        
-                        // Instead of returning a single JSON object, we return an array of JSON objects
-                        const jsonResponse = balancerConfigs.map(config => JSON.stringify(config, null, 2));
+                    
+                        // Convert each balancer configuration to a JSON string and then parse it back to ensure proper formatting
+                        const jsonResponse = balancerConfigs.map(config => JSON.parse(JSON.stringify(config)));
                     
                         return new Response(
-                            JSON.stringify(jsonResponse, null, 4), 
+                            JSON.stringify(jsonResponse, null, 2), 
                             {
                                 status: 200,
                                 headers: { 'Content-Type': 'application/json' }
                             }
                         );
+                    
                         
                         
     
