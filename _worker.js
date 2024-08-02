@@ -896,7 +896,6 @@ const getLoadBalanceConfigs = async (env, hostName) => {
                 },
                 tag: `server${index + 1}`
             };
-
             config.outbounds.push(outbound);
             config.routing.balancers[0].selector.push(`server${index + 1}`);
         });
@@ -904,11 +903,17 @@ const getLoadBalanceConfigs = async (env, hostName) => {
         balancerConfigs.push(
             {
                 tag: `💦 CFW LB - PORT ${port} 🚀`,
-                config: config
+                config: {
+                    ...config,
+                    remarks: `💦 CFW LB - PORT ${port} 🚀`
+                }
             },
             {
                 tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
-                config: JSON.parse(JSON.stringify(config))
+                config: {
+                    ...JSON.parse(JSON.stringify(config)),
+                    remarks: `💦 CFW LB - FRAG - PORT ${port} 🚀`
+                }
             }
         );
 
