@@ -1168,7 +1168,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
     for (let portIndex in ports.filter(port => defaultHttpsPorts.includes(port))) {
         let port = +ports[portIndex];
         for (let index in Addresses) {            
-            let remark = `💦 BPB Frag - Best Fragment - Clean IP_${+index + 1} : ${port}😎`;
+            let remark = `💦 BPB Frag - Clean IP_${+index + 1} : ${port}😎`;
             let addr = Addresses[index];
             let fragConfig = structuredClone(xrayConfigTemp);
             let outbound = structuredClone(xrayOutboundTemp);
