@@ -818,8 +818,11 @@ const getNormalConfigs = async (env, hostName, client) => {
 
 
 async function handleLoadBalancerOutBound(request, remoteSocket, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log) {
+    log('Entering handleLoadBalancerOutBound');
     const loadBalancerConfig = await getLoadBalancerConfigs(env, hostName, 'v2ray');
+    log(`Load balancer config: ${JSON.stringify(loadBalancerConfig)}`);
     const outbounds = loadBalancerConfig[0].outbounds.filter(outbound => outbound.protocol === 'vless');
+    log(`Filtered outbounds: ${JSON.stringify(outbounds)}`);
     
     let connectedSocket = null;
     let retryCount = 0;
@@ -828,11 +831,13 @@ async function handleLoadBalancerOutBound(request, remoteSocket, addressRemote, 
     while (retryCount < maxRetries && !connectedSocket) {
         const outbound = outbounds[retryCount];
         try {
+            log(`Attempting to connect to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`);
             const tcpSocket = await connectAndWrite(outbound.settings.vnext[0].address, outbound.settings.vnext[0].port);
             connectedSocket = tcpSocket;
+            log(`Successfully connected to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`);
             break;
         } catch (error) {
-            console.error(`Failed to connect to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`, error);
+            log(`Failed to connect to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`, error);
             retryCount++;
         }
     }
@@ -858,6 +863,7 @@ async function handleLoadBalancerOutBound(request, remoteSocket, addressRemote, 
         return tcpSocket;
     }
 }
+
 
 
 
