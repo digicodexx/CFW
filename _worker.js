@@ -56,14 +56,6 @@ export default {
                         return new Response(normalConfigs, { status: 200 });        
                         
 
-                    case `/balancersub/${userID}`:
-                        const balancerConfigs = await getLoadBalancerConfigs(env, host, client);
-                        return new Response(JSON.stringify(balancerConfigs, null, 2), { 
-                            status: 200,
-                            headers: { "Content-Type": "application/json" }
-                        });
-                        
-                        
 
                     case `/fragsub/${userID}`:
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
@@ -288,14 +280,7 @@ async function vlessOverWSHandler(request) {
                 return;
             }
 
-            // Check if it's a load balancer request
-            const isLoadBalancer = request.url.includes('/loadbalancer/');
-            
-            if (isLoadBalancer) {
-                await handleLoadBalancerOutBound(request, remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log);
-            } else {
-                await handleTCPOutBound(request, remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log);
-            }
+            await handleTCPOutBound(request, remoteSocketWapper, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log);
         },
         close() {
             log(`readableWebSocketStream is close`);
@@ -312,6 +297,7 @@ async function vlessOverWSHandler(request) {
         webSocket: client,
     });
 }
+
 
 
 /**
@@ -814,191 +800,6 @@ const getNormalConfigs = async (env, hostName, client) => {
     });
 
     return btoa(vlessWsTls);
-}
-
-
-async function handleLoadBalancerOutBound(request, remoteSocket, addressRemote, portRemote, rawClientData, webSocket, vlessResponseHeader, log) {
-    log('Entering handleLoadBalancerOutBound');
-    const loadBalancerConfig = await getLoadBalancerConfigs(env, hostName, 'v2ray');
-    log(`Load balancer config: ${JSON.stringify(loadBalancerConfig)}`);
-    const outbounds = loadBalancerConfig[0].outbounds.filter(outbound => outbound.protocol === 'vless');
-    log(`Filtered outbounds: ${JSON.stringify(outbounds)}`);
-    
-    let connectedSocket = null;
-    let retryCount = 0;
-    const maxRetries = outbounds.length;
-
-    while (retryCount < maxRetries && !connectedSocket) {
-        const outbound = outbounds[retryCount];
-        try {
-            log(`Attempting to connect to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`);
-            const tcpSocket = await connectAndWrite(outbound.settings.vnext[0].address, outbound.settings.vnext[0].port);
-            connectedSocket = tcpSocket;
-            log(`Successfully connected to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`);
-            break;
-        } catch (error) {
-            log(`Failed to connect to ${outbound.settings.vnext[0].address}:${outbound.settings.vnext[0].port}`, error);
-            retryCount++;
-        }
-    }
-
-    if (!connectedSocket) {
-        throw new Error('Failed to connect to any outbound server');
-    }
-
-    remoteSocket.value = connectedSocket;
-    
-    // When remoteSocket is ready, pass to websocket
-    remoteSocketToWS(connectedSocket, webSocket, vlessResponseHeader, null, log);
-
-    async function connectAndWrite(address, port) {
-        const tcpSocket = connect({
-            hostname: address,
-            port: port,
-        });
-        log(`connected to ${address}:${port}`);
-        const writer = tcpSocket.writable.getWriter();
-        await writer.write(rawClientData);
-        writer.releaseLock();
-        return tcpSocket;
-    }
-}
-
-
-
-
-const getLoadBalancerConfigs = async (env, hostName, client) => {
-    let proxySettings = {};
-    let balancerConfigs = [];
-
-    try {
-        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
-    } catch (error) {
-        console.log(error);
-        throw new Error(`An error occurred while getting load balancer configs - ${error}`);
-    }
-
-    const { cleanIPs, proxyIP, ports } = proxySettings;
-    // Only use cleanIPs for Addresses
-    const Addresses = cleanIPs ? cleanIPs.split(',') : [];
-
-    // Create a separate loadbalancer configuration for each port
-    ports.forEach(port => {
-        let loadBalancerConfig = {
-            remarks: `💦 BPB - Load Balancer - ${port} 🚀`,
-            log: {
-                loglevel: "warning"
-            },
-            inbounds: [
-                {
-                    port: 10808,
-                    protocol: "socks",
-                    settings: {
-                        auth: "noauth",
-                        udp: true,
-                        userLevel: 8
-                    },
-                    sniffing: {
-                        destOverride: ["http", "tls"],
-                        enabled: true,
-                        routeOnly: true
-                    },
-                    tag: "socks-in"
-                },
-                {
-                    port: 10809,
-                    protocol: "http",
-                    settings: {
-                        auth: "noauth",
-                        udp: true,
-                        userLevel: 8
-                    },
-                    sniffing: {
-                        destOverride: ["http", "tls"],
-                        enabled: true,
-                        routeOnly: true
-                    },
-                    tag: "http-in"
-                }
-            ],
-            outbounds: [
-                {
-                    protocol: "freedom",
-                    settings: {},
-                    tag: "direct"
-                }
-            ],
-            routing: {
-                domainStrategy: "IPIfNonMatch",
-                rules: [
-                    {
-                        type: "field",
-                        ip: ["geoip:private"],
-                        outboundTag: "direct"
-                    },
-                    {
-                        type: "field",
-                        domain: ["geosite:category-ads-all"],
-                        outboundTag: "block"
-                    },
-                    {
-                        type: "field",
-                        balancerTag: `loadbalancer-${port}`,
-                        network: "tcp,udp"
-                    }
-                ],
-                balancers: [
-                    {
-                        tag: `loadbalancer-${port}`,
-                        selector: [],
-                        strategy: {
-                            type: "leastPing"
-                        }
-                    }
-                ]
-            }
-        };
-
-        Addresses.forEach((addr, index) => {
-            const outbound = {
-                protocol: "vless",
-                settings: {
-                    vnext: [
-                        {
-                            address: addr,
-                            port: parseInt(port),
-                            users: [{ id: userID, encryption: "none" }]
-                        }
-                    ]
-                },
-                streamSettings: {
-                    network: "ws",
-                    security: "tls",
-                    wsSettings: {
-                        path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
-                        headers: { Host: randomUpperCase(hostName) }
-                    },
-                    tlsSettings: {
-                        serverName: randomUpperCase(hostName)
-                    }
-                },
-                tag: `outbound-${index + 1}-${port}`
-            };
-            loadBalancerConfig.outbounds.push(outbound);
-            loadBalancerConfig.routing.balancers[0].selector.push(`outbound-${index + 1}-${port}`);
-        });
-
-        // Add a block outbound
-        loadBalancerConfig.outbounds.push({
-            protocol: "blackhole",
-            settings: {},
-            tag: "block"
-        });
-
-        balancerConfigs.push(loadBalancerConfig);
-    });
-
-    return balancerConfigs;
 }
 
 
