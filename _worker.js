@@ -55,9 +55,10 @@ export default {
                         const normalConfigs = await getNormalConfigs(env, host, client);
                         return new Response(normalConfigs, { status: 200 });        
                         
+
                     case `/balancersub/${userID}`:
-                        const balancerConfigs = await getNormalConfigs(env, host, client);
-                        return new Response(balancerConfigs.balancer, { status: 200 });
+                        const balancerConfigs = await getLoadBalancerConfigs(env, host, client);
+                        return new Response(JSON.stringify(balancerConfigs), { status: 200 });
                         
 
                     case `/fragsub/${userID}`:
@@ -771,13 +772,51 @@ async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
 const getNormalConfigs = async (env, hostName, client) => {
     let proxySettings = {};
     let vlessWsTls = '';
-    let balancerConfigs = '';
 
     try {
         proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
     } catch (error) {
         console.log(error);
         throw new Error(`An error occurred while getting normal configs - ${error}`);
+    }
+
+    const { cleanIPs, proxyIP, ports } = proxySettings;
+    // Only use cleanIPs for Addresses
+    const Addresses = cleanIPs ? cleanIPs.split(',') : [];
+
+    ports.forEach(port => {
+        Addresses.forEach((addr, index) => {
+            let config = `vless://${userID}@${addr}:${port}?encryption=none&type=ws&host=${
+                randomUpperCase(hostName)}${
+                defaultHttpsPorts.includes(port) 
+                    ? `&security=tls&sni=${
+                        randomUpperCase(hostName)
+                    }&fp=randomized&alpn=${
+                        client === 'singbox' ? 'http/1.1' : 'h2,http/1.1'
+                    }`
+                    : ''}&path=${`/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}`}${
+                        client === 'singbox' 
+                            ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
+                            : encodeURIComponent('?ed=2560')
+                    }#${encodeURIComponent(generateRemark(index, port))}`;
+            
+            vlessWsTls += config + '\n';
+        });
+    });
+
+    return btoa(vlessWsTls);
+}
+
+
+const getLoadBalancerConfigs = async (env, hostName, client) => {
+    let proxySettings = {};
+    let balancerConfigs = [];
+
+    try {
+        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+    } catch (error) {
+        console.log(error);
+        throw new Error(`An error occurred while getting load balancer configs - ${error}`);
     }
 
     const { cleanIPs, proxyIP, ports } = proxySettings;
@@ -805,22 +844,6 @@ const getNormalConfigs = async (env, hostName, client) => {
 
     ports.forEach(port => {
         Addresses.forEach((addr, index) => {
-            let config = `vless://${userID}@${addr}:${port}?encryption=none&type=ws&host=${
-                randomUpperCase(hostName)}${
-                defaultHttpsPorts.includes(port) 
-                    ? `&security=tls&sni=${
-                        randomUpperCase(hostName)
-                    }&fp=randomized&alpn=${
-                        client === 'singbox' ? 'http/1.1' : 'h2,http/1.1'
-                    }`
-                    : ''}&path=${`/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}`}${
-                        client === 'singbox' 
-                            ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
-                            : encodeURIComponent('?ed=2560')
-                    }#${encodeURIComponent(generateRemark(index, port))}`;
-            
-            vlessWsTls += config + '\n';
-
             // Add to loadbalancer configuration
             loadBalancerConfig.settings.vnext.push({
                 address: addr,
@@ -830,13 +853,9 @@ const getNormalConfigs = async (env, hostName, client) => {
         });
     });
 
-    // Add loadbalancer configuration to balancerConfigs
-    balancerConfigs = JSON.stringify(loadBalancerConfig) + '\n';
+    balancerConfigs.push(loadBalancerConfig);
 
-    return {
-        normal: btoa(vlessWsTls),
-        balancer: btoa(balancerConfigs)
-    };
+    return balancerConfigs;
 }
 
 
@@ -2275,6 +2294,36 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
                     </tr>
                 </table>
             </div>
+            <h2>LOAD BALANCER SUB ⚖️</h2>
+            <div class="table-container">
+                <table id="balancer-configs-table">
+                    <tr>
+                        <th>Application</th>
+                        <th>Subscription</th>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>v2rayN</span>
+                            </div>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>Nekoray</span>
+                            </div>
+                        </td>
+                        <td>
+                            <button onclick="openQR('https://${hostName}/balancersub/${userID}#CFW Balancers', 'Load Balancer Subscription')" style="margin-bottom: 8px;">
+                                QR Code&nbsp;<span class="material-symbols-outlined">qr_code</span>
+                            </button>
+                            <button onclick="copyToClipboard('https://${hostName}/balancersub/${userID}#CFW Balancers', false)">
+                                Copy Sub<span class="material-symbols-outlined">format_list_bulleted</span>
+                            </button>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
             <h2>WARP SUB 🔗</h2>
 			<div class="table-container">
 				<table id="normal-configs-table">
