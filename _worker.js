@@ -922,7 +922,7 @@ const getLoadBalanceConfigs = async (env, hostName) => {
             outbound.settings.fragment = {
                 packets: "tlshello",
                 length: "100-200",
-                interval: "5-10"
+                interval: "1-1"
             };
         });
     });
