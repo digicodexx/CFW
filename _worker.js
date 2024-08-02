@@ -811,7 +811,7 @@ const getNormalConfigs = async (env, hostName, client) => {
                         client === 'singbox' 
                             ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
                             : encodeURIComponent('?ed=2560')
-                    }#${encodeURIComponent(generateRemark(index + 1, port))}`;
+                    }#${encodeURIComponent(generateRemark(index, port))}`;
             
             vlessWsTls += config + '\n';
 
@@ -824,12 +824,21 @@ const getNormalConfigs = async (env, hostName, client) => {
         });
     });
 
-    // Add loadbalancer configuration to vlessWsTls
-    vlessWsTls += JSON.stringify(loadBalancerConfig) + '\n';
-    
+    // Add loadbalancer configuration to vlessWsTls as a vless URL
+    const loadBalancerUrl = `vless://${userID}@${hostName}:443?encryption=none&type=ws&host=${
+        randomUpperCase(hostName)}&security=tls&sni=${
+        randomUpperCase(hostName)}&fp=randomized&alpn=${
+        client === 'singbox' ? 'http/1.1' : 'h2,http/1.1'}&path=${
+        loadBalancerConfig.streamSettings.wsSettings.path}${
+        client === 'singbox' 
+            ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
+            : encodeURIComponent('?ed=2560')
+    }#${encodeURIComponent('💦 BPB - Load Balancer 🚀')}`;
+
+    vlessWsTls += loadBalancerUrl + '\n';
+
     return btoa(vlessWsTls);
 }
-
 
 // const generateRemark = (index, port) => {
 //     let remark = '';
