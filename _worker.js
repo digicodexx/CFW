@@ -53,28 +53,15 @@ export default {
                             return new Response(`${JSON.stringify(BestPingSFA, null, 4)}`, { status: 200 });                            
                         }
                         const normalConfigs = await getNormalConfigs(env, host, client);
-                        return new Response(normalConfigs, { status: 200 });        
-                        
+                        return new Response(normalConfigs, { status: 200 });    
 
+                    
                     case `/balancersub/${userID}`:
-                        const balancerConfigs = await getLoadBalanceConfigs(env, host);
-                    
-                        // Create an array of JSON configurations
-                        const jsonResponse = balancerConfigs.map(config => JSON.stringify(config, null, 2));
-                    
-                        // Join each JSON configuration with newline separators
-                        const responseText = jsonResponse.join('\n');
-                    
-                        return new Response(
-                            responseText, 
-                            {
-                                status: 200,
-                                headers: { 'Content-Type': 'application/json' }
-                            }
-                        );
+                        let balancerConfigs = await getLoadBalanceConfigs(env, host);
+                        balancerConfigs = balancerConfigs.map(config => config.config);
+                        return new Response(`${JSON.stringify(balancerConfigs, null, 4)}`, { status: 200 });
                         
                          
-    
                     case `/fragsub/${userID}`:
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
                         fragConfigs = fragConfigs.map(config => config.config);
