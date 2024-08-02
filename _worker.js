@@ -20,7 +20,7 @@ let proxyIP = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
 
 let dohURL = 'https://cloudflare-dns.com/dns-query';
 
-let panelVersion = '2.4.5';
+let panelVersion = '2.4.6';
 
 if (!isValidUUID(userID)) {
     throw new Error('uuid is not valid');
@@ -35,31 +35,19 @@ export default {
      */
     async fetch(request, env, ctx) {
         try {
-            
             userID = env.UUID || userID;
             proxyIP = env.PROXYIP || proxyIP;
             dohURL = env.DNS_RESOLVER_URL || dohURL;
             const upgradeHeader = request.headers.get('Upgrade');
             
             if (!upgradeHeader || upgradeHeader !== 'websocket') {
-                
                 const url = new URL(request.url);
                 const searchParams = new URLSearchParams(url.search);
                 const host = request.headers.get('Host');
                 const client = searchParams.get('app');
 
                 switch (url.pathname) {
-
-                    case '/cf':
-                        return new Response(JSON.stringify(request.cf, null, 4), {
-                            status: 200,
-                            headers: {
-                                'Content-Type': 'application/json;charset=utf-8',
-                            },
-                        });
-                        
                     case `/sub/${userID}`:
-
                         if (client === 'sfa') {
                             const BestPingSFA = await getSingboxConfig(env, host);
                             return new Response(`${JSON.stringify(BestPingSFA, null, 4)}`, { status: 200 });                            
@@ -68,10 +56,8 @@ export default {
                         return new Response(normalConfigs, { status: 200 });                        
 
                     case `/fragsub/${userID}`:
-
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
                         fragConfigs = fragConfigs.map(config => config.config);
-
                         return new Response(`${JSON.stringify(fragConfigs, null, 4)}`, { status: 200 });
 
                     case `/warpsub/${userID}`:
@@ -792,9 +778,28 @@ const getNormalConfigs = async (env, hostName, client) => {
     // Only use cleanIPs for Addresses
     const Addresses = cleanIPs ? cleanIPs.split(',') : [];
 
+    // Create a loadbalancer configuration
+    let loadBalancerConfig = {
+        tag: "loadbalancer",
+        protocol: "vless",
+        settings: {
+            vnext: []
+        },
+        streamSettings: {
+            network: "ws",
+            security: "tls",
+            wsSettings: {
+                path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`
+            },
+            tlsSettings: {
+                serverName: randomUpperCase(hostName)
+            }
+        }
+    };
+
     ports.forEach(port => {
         Addresses.forEach((addr, index) => {
-            vlessWsTls += 'vless' + `://${userID}@${addr}:${port}?encryption=none&type=ws&host=${
+            let config = `vless://${userID}@${addr}:${port}?encryption=none&type=ws&host=${
                 randomUpperCase(hostName)}${
                 defaultHttpsPorts.includes(port) 
                     ? `&security=tls&sni=${
@@ -806,13 +811,25 @@ const getNormalConfigs = async (env, hostName, client) => {
                         client === 'singbox' 
                             ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
                             : encodeURIComponent('?ed=2560')
-                    }#${encodeURIComponent(generateRemark(index + 1, port))}\n`;
+                    }#${encodeURIComponent(generateRemark(index + 1, port))}`;
+            
+            vlessWsTls += config + '\n';
+
+            // Add to loadbalancer configuration
+            loadBalancerConfig.settings.vnext.push({
+                address: addr,
+                port: parseInt(port),
+                users: [{ id: userID, encryption: "none" }]
+            });
         });
     });
 
+    // Add loadbalancer configuration to vlessWsTls
+    vlessWsTls += JSON.stringify(loadBalancerConfig) + '\n';
 
     return btoa(vlessWsTls);
 }
+
 
 // const generateRemark = (index, port) => {
 //     let remark = '';
@@ -1123,11 +1140,14 @@ const getFragmentConfigs = async (env, hostName, client) => {
         bestPing.inbounds[2].port = 6450;
     }
 
-    let bestFragment = structuredClone(xrayConfigTemp);
     bestFragment.remarks = '💦 BPB Frag - Best Fragment 😎';
     bestFragment.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn);
     bestFragment.outbounds.splice(0,1);
-    bestFragValues.forEach( (fragLength, index) => {
+    
+    // Modified frag values as requested
+    const bestFragValues = ['50-100', '50-200', '50-250', '100-200', '100-250'];
+    
+    bestFragValues.forEach((fragLength, index) => {
         bestFragment.outbounds.push({
             tag: `frag_${index + 1}`,
             protocol: "freedom",
@@ -1143,6 +1163,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
             }
         });
     });
+
 
     let bestFragmentOutbounds = structuredClone([{...outbounds[0]}, {...outbounds[1]}]);  
     bestFragmentOutbounds[0].settings.vnext[0].port = 443;
