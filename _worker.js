@@ -55,7 +55,10 @@ export default {
                         const normalConfigs = await getNormalConfigs(env, host, client);
                         return new Response(normalConfigs, { status: 200 });        
                         
-
+                    case `/balancersub/${userID}`:
+                        const balancerConfigs = await getLoadBalanceConfigs(env, host);
+                        return new Response(`${JSON.stringify(balancerConfigs, null, 4)}`, { status: 200 });
+    
 
                     case `/fragsub/${userID}`:
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
@@ -802,6 +805,72 @@ const getNormalConfigs = async (env, hostName, client) => {
     return btoa(vlessWsTls);
 }
 
+
+const getLoadBalanceConfigs = async (env, hostName) => {
+    let proxySettings = {};
+    let balancerConfigs = [];
+
+    try {
+        proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
+    } catch (error) {
+        console.log(error);
+        throw new Error(`An error occurred while getting load balancer configs - ${error}`);
+    }
+
+    const { cleanIPs, proxyIP, ports } = proxySettings;
+    const Addresses = cleanIPs ? cleanIPs.split(',') : [];
+
+    ports.forEach(port => {
+        let normalConfig = {
+            tag: `💦 CFW LB - PORT ${port} 🚀`,
+            outbounds: []
+        };
+        let fragConfig = {
+            tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
+            outbounds: []
+        };
+
+        Addresses.forEach((addr, index) => {
+            let outbound = {
+                protocol: "vless",
+                settings: {
+                    vnext: [{
+                        address: addr,
+                        port: parseInt(port),
+                        users: [{ id: userID, encryption: "none" }]
+                    }]
+                },
+                streamSettings: {
+                    network: "ws",
+                    security: defaultHttpsPorts.includes(port) ? "tls" : "none",
+                    tlsSettings: defaultHttpsPorts.includes(port) ? {
+                        serverName: randomUpperCase(hostName),
+                        alpn: ["h2", "http/1.1"],
+                        fingerprint: "randomized"
+                    } : undefined,
+                    wsSettings: {
+                        path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
+                        headers: { Host: randomUpperCase(hostName) }
+                    }
+                },
+                tag: `server${index + 1}`
+            };
+            normalConfig.outbounds.push(outbound);
+            
+            let fragOutbound = JSON.parse(JSON.stringify(outbound));
+            fragOutbound.settings.fragment = {
+                packets: "tlshello",
+                length: "100-200",
+                interval: "5-10"
+            };
+            fragConfig.outbounds.push(fragOutbound);
+        });
+
+        balancerConfigs.push(normalConfig, fragConfig);
+    });
+
+    return balancerConfigs;
+}
 
 
 
@@ -2199,6 +2268,35 @@ const renderHomePage = async (env, hostName, fragConfigs) => {
                     </tr>
 				</table>
 			</div>
+            <h2>LOAD BALANCER SUB ⚖️</h2>
+            <div class="table-container">
+                <table id="balancer-configs-table">
+                    <tr>
+                        <th>Application</th>
+                        <th>Subscription</th>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>v2rayN</span>
+                            </div>
+                            <div>
+                                <span class="material-symbols-outlined symbol">verified</span>
+                                <span>Nekoray</span>
+                            </div>
+                        </td>
+                        <td>
+                            <button onclick="openQR('https://${hostName}/balancersub/${userID}#CFW Balancers', 'Load Balancer Subscription')" style="margin-bottom: 8px;">
+                                QR Code&nbsp;<span class="material-symbols-outlined">qr_code</span>
+                            </button>
+                            <button onclick="copyToClipboard('https://${hostName}/balancersub/${userID}#CFW Balancers', false)">
+                                Copy Sub<span class="material-symbols-outlined">format_list_bulleted</span>
+                            </button>
+                        </td>
+                    </tr>
+                </table>
+            </div>
 			<h2>FRAGMENT SUB ⛓️</h2>
 			<div class="table-container">
                 <table id="frag-sub-table">
