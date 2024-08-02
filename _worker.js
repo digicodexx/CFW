@@ -53,7 +53,12 @@ export default {
                             return new Response(`${JSON.stringify(BestPingSFA, null, 4)}`, { status: 200 });                            
                         }
                         const normalConfigs = await getNormalConfigs(env, host, client);
-                        return new Response(normalConfigs, { status: 200 });                        
+                        return new Response(normalConfigs, { status: 200 });        
+                        
+                    case `/balancersub/${userID}`:
+                        const balancerConfigs = await getNormalConfigs(env, host, client);
+                        return new Response(balancerConfigs.balancer, { status: 200 });
+                        
 
                     case `/fragsub/${userID}`:
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
@@ -766,6 +771,7 @@ async function handleUDPOutBound(webSocket, vlessResponseHeader, log) {
 const getNormalConfigs = async (env, hostName, client) => {
     let proxySettings = {};
     let vlessWsTls = '';
+    let balancerConfigs = '';
 
     try {
         proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
@@ -824,21 +830,15 @@ const getNormalConfigs = async (env, hostName, client) => {
         });
     });
 
-    // Add loadbalancer configuration to vlessWsTls as a vless URL
-    const loadBalancerUrl = `vless://${userID}@${hostName}:443?encryption=none&type=ws&host=${
-        randomUpperCase(hostName)}&security=tls&sni=${
-        randomUpperCase(hostName)}&fp=randomized&alpn=${
-        client === 'singbox' ? 'http/1.1' : 'h2,http/1.1'}&path=${
-        loadBalancerConfig.streamSettings.wsSettings.path}${
-        client === 'singbox' 
-            ? '&eh=Sec-WebSocket-Protocol&ed=2560' 
-            : encodeURIComponent('?ed=2560')
-    }#${encodeURIComponent('💦 BPB - Load Balancer 🚀')}`;
+    // Add loadbalancer configuration to balancerConfigs
+    balancerConfigs = JSON.stringify(loadBalancerConfig) + '\n';
 
-    vlessWsTls += loadBalancerUrl + '\n';
-
-    return btoa(vlessWsTls);
+    return {
+        normal: btoa(vlessWsTls),
+        balancer: btoa(balancerConfigs)
+    };
 }
+
 
 // const generateRemark = (index, port) => {
 //     let remark = '';
