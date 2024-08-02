@@ -827,67 +827,83 @@ const getLoadBalancerConfigs = async (env, hostName, client) => {
     // Only use cleanIPs for Addresses
     const Addresses = cleanIPs ? cleanIPs.split(',') : [];
 
-    // Create a loadbalancer configuration
-    let loadBalancerConfig = {
-        remarks: "💦 BPB - Load Balancer 🚀",
-        log: {
-            loglevel: "warning"
-        },
-        inbounds: [
-            {
-                port: 10808,
-                protocol: "socks",
-                settings: {
-                    auth: "noauth",
-                    udp: true,
-                    userLevel: 8
-                },
-                sniffing: {
-                    destOverride: ["http", "tls"],
-                    enabled: true,
-                    routeOnly: true
-                },
-                tag: "socks-in"
+    // Create a separate loadbalancer configuration for each port
+    ports.forEach(port => {
+        let loadBalancerConfig = {
+            remarks: `💦 BPB - Load Balancer - ${port} 🚀`,
+            log: {
+                loglevel: "warning"
             },
-            {
-                port: 10809,
-                protocol: "http",
-                settings: {
-                    auth: "noauth",
-                    udp: true,
-                    userLevel: 8
-                },
-                sniffing: {
-                    destOverride: ["http", "tls"],
-                    enabled: true,
-                    routeOnly: true
-                },
-                tag: "http-in"
-            }
-        ],
-        outbounds: [],
-        routing: {
-            domainStrategy: "IPIfNonMatch",
-            rules: [
+            inbounds: [
                 {
-                    type: "field",
-                    balancerTag: "loadbalancer",
-                    network: "tcp,udp"
+                    port: 10808,
+                    protocol: "socks",
+                    settings: {
+                        auth: "noauth",
+                        udp: true,
+                        userLevel: 8
+                    },
+                    sniffing: {
+                        destOverride: ["http", "tls"],
+                        enabled: true,
+                        routeOnly: true
+                    },
+                    tag: "socks-in"
+                },
+                {
+                    port: 10809,
+                    protocol: "http",
+                    settings: {
+                        auth: "noauth",
+                        udp: true,
+                        userLevel: 8
+                    },
+                    sniffing: {
+                        destOverride: ["http", "tls"],
+                        enabled: true,
+                        routeOnly: true
+                    },
+                    tag: "http-in"
                 }
             ],
-            balancers: [
+            outbounds: [
                 {
-                    tag: "loadbalancer",
-                    selector: [],
-                    strategy: {
-                        type: "leastPing"
-                    }
+                    protocol: "freedom",
+                    settings: {},
+                    tag: "direct"
                 }
-            ]
-        }
-    };
+            ],
+            routing: {
+                domainStrategy: "IPIfNonMatch",
+                rules: [
+                    {
+                        type: "field",
+                        ip: ["geoip:private"],
+                        outboundTag: "direct"
+                    },
+                    {
+                        type: "field",
+                        domain: ["geosite:category-ads-all"],
+                        outboundTag: "block"
+                    },
+                    {
+                        type: "field",
+                        balancerTag: `loadbalancer-${port}`,
+                        network: "tcp,udp"
+                    }
+                ],
+                balancers: [
+                    {
+                        tag: `loadbalancer-${port}`,
+                        selector: [],
+                        strategy: {
+                            type: "leastPing"
+                        }
+                    }
+                ]
+            }
+        };
 
-    ports.forEach(port => {
         Addresses.forEach((addr, index) => {
             const outbound = {
                 protocol: "vless",
@@ -916,13 +932,19 @@ const getLoadBalancerConfigs = async (env, hostName, client) => {
             loadBalancerConfig.outbounds.push(outbound);
             loadBalancerConfig.routing.balancers[0].selector.push(`outbound-${index + 1}-${port}`);
         });
-    });
 
-    balancerConfigs.push(loadBalancerConfig);
+        // Add a block outbound
+        loadBalancerConfig.outbounds.push({
+            protocol: "blackhole",
+            settings: {},
+            tag: "block"
+        });
+
+        balancerConfigs.push(loadBalancerConfig);
+    });
 
     return balancerConfigs;
 }
-
 
 
 
@@ -1110,10 +1132,6 @@ const getFragmentConfigs = async (env, hostName, client) => {
     let proxySettings = {};
     let proxyOutbound;
     let proxyIndex = 1;
-    // const bestFragValues = ['10-20', '20-30', '30-40', '40-50', '50-60', '60-70', 
-    //                         '70-80', '80-90', '90-100', '10-30', '20-40', '30-50', 
-    //                         '40-60', '50-70', '60-80', '70-90', '80-100', '100-200']
-    // Modified frag values as requested
     const bestFragValues = ['50-100', '50-200', '100-200', '100-250'];
 
     try {
@@ -1161,7 +1179,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
     for (let portIndex in ports.filter(port => defaultHttpsPorts.includes(port))) {
         let port = +ports[portIndex];
         for (let index in Addresses) {            
-            let remark = generateRemark(+index, port);
+            let remark = `💦 BPB Frag - Best Fragment - Clean IP_${+index + 1} : ${port}😎`;
             let addr = Addresses[index];
             let fragConfig = structuredClone(xrayConfigTemp);
             let outbound = structuredClone(xrayOutboundTemp);
