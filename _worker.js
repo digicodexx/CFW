@@ -1141,7 +1141,8 @@ const getFragmentConfigs = async (env, hostName, client) => {
         bestPing.inbounds[1].port = 2081;
         bestPing.inbounds[2].port = 6450;
     }
-
+    
+    let bestFragment = structuredClone(xrayConfigTemp);
     bestFragment.remarks = '💦 BPB Frag - Best Fragment 😎';
     bestFragment.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn);
     bestFragment.outbounds.splice(0,1);
