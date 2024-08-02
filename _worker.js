@@ -60,9 +60,9 @@ export default {
                         const balancerConfigs = await getLoadBalanceConfigs(env, host);
                     
                         // Create an array of JSON configurations
-                        const jsonResponse = balancerConfigs.map(config => JSON.stringify(config.config, null, 2));
+                        const jsonResponse = balancerConfigs.map(config => JSON.stringify(config, null, 2));
                     
-                        // Join each JSON configuration with a newline separator
+                        // Join each JSON configuration with newline separators
                         const responseText = jsonResponse.join('\n');
                     
                         return new Response(
@@ -72,9 +72,8 @@ export default {
                                 headers: { 'Content-Type': 'application/json' }
                             }
                         );
-                    
                         
-                        
+                         
     
                     case `/fragsub/${userID}`:
                         let fragConfigs = await getFragmentConfigs(env, host, 'v2ray');
@@ -933,6 +932,8 @@ const getLoadBalanceConfigs = async (env, hostName) => {
 
     return balancerConfigs;
 }
+
+
 
 
 
