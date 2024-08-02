@@ -848,7 +848,7 @@ const getLoadBalanceConfigs = async (env, hostName) => {
                         tag: "balancer",
                         selector: [],
                         strategy: {
-                            type: "leastPing"
+                            type: "Random"
                         }
                     }
                 ],
