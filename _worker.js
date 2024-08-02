@@ -58,7 +58,11 @@ export default {
 
                     case `/balancersub/${userID}`:
                         const balancerConfigs = await getLoadBalancerConfigs(env, host, client);
-                        return new Response(JSON.stringify(balancerConfigs), { status: 200 });
+                        return new Response(JSON.stringify(balancerConfigs, null, 2), { 
+                            status: 200,
+                            headers: { "Content-Type": "application/json" }
+                        });
+                        
                         
 
                     case `/fragsub/${userID}`:
@@ -825,41 +829,100 @@ const getLoadBalancerConfigs = async (env, hostName, client) => {
 
     // Create a loadbalancer configuration
     let loadBalancerConfig = {
-        tag: "loadbalancer",
-        protocol: "vless",
-        settings: {
-            vnext: []
+        remarks: "💦 BPB - Load Balancer 🚀",
+        log: {
+            loglevel: "warning"
         },
-        streamSettings: {
-            network: "ws",
-            security: "tls",
-            wsSettings: {
-                path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`
+        inbounds: [
+            {
+                port: 10808,
+                protocol: "socks",
+                settings: {
+                    auth: "noauth",
+                    udp: true,
+                    userLevel: 8
+                },
+                sniffing: {
+                    destOverride: ["http", "tls"],
+                    enabled: true,
+                    routeOnly: true
+                },
+                tag: "socks-in"
             },
-            tlsSettings: {
-                serverName: randomUpperCase(hostName)
+            {
+                port: 10809,
+                protocol: "http",
+                settings: {
+                    auth: "noauth",
+                    udp: true,
+                    userLevel: 8
+                },
+                sniffing: {
+                    destOverride: ["http", "tls"],
+                    enabled: true,
+                    routeOnly: true
+                },
+                tag: "http-in"
             }
+        ],
+        outbounds: [],
+        routing: {
+            domainStrategy: "IPIfNonMatch",
+            rules: [
+                {
+                    type: "field",
+                    balancerTag: "loadbalancer",
+                    network: "tcp,udp"
+                }
+            ],
+            balancers: [
+                {
+                    tag: "loadbalancer",
+                    selector: [],
+                    strategy: {
+                        type: "leastPing"
+                    }
+                }
+            ]
         }
     };
 
     ports.forEach(port => {
         Addresses.forEach((addr, index) => {
-            // Add to loadbalancer configuration
-            loadBalancerConfig.settings.vnext.push({
-                address: addr,
-                port: parseInt(port),
-                users: [{ id: userID, encryption: "none" }]
-            });
+            const outbound = {
+                protocol: "vless",
+                settings: {
+                    vnext: [
+                        {
+                            address: addr,
+                            port: parseInt(port),
+                            users: [{ id: userID, encryption: "none" }]
+                        }
+                    ]
+                },
+                streamSettings: {
+                    network: "ws",
+                    security: "tls",
+                    wsSettings: {
+                        path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
+                        headers: { Host: randomUpperCase(hostName) }
+                    },
+                    tlsSettings: {
+                        serverName: randomUpperCase(hostName)
+                    }
+                },
+                tag: `outbound-${index + 1}-${port}`
+            };
+            loadBalancerConfig.outbounds.push(outbound);
+            loadBalancerConfig.routing.balancers[0].selector.push(`outbound-${index + 1}-${port}`);
         });
     });
 
-    balancerConfigs.push({
-        name: "💦 BPB - Load Balancer 🚀",
-        config: loadBalancerConfig
-    });
+    balancerConfigs.push(loadBalancerConfig);
 
     return balancerConfigs;
 }
+
 
 
 
