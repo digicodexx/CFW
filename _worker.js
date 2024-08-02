@@ -826,7 +826,7 @@ const getNormalConfigs = async (env, hostName, client) => {
 
     // Add loadbalancer configuration to vlessWsTls
     vlessWsTls += JSON.stringify(loadBalancerConfig) + '\n';
-
+    
     return btoa(vlessWsTls);
 }
 
