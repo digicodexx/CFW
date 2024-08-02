@@ -1018,7 +1018,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
     //                         '70-80', '80-90', '90-100', '10-30', '20-40', '30-50', 
     //                         '40-60', '50-70', '60-80', '70-90', '80-100', '100-200']
     // Modified frag values as requested
-    const bestFragValues = ['50-100', '50-200', '50-250', '100-200', '100-250'];
+    const bestFragValues = ['50-100', '50-200', '100-200', '100-250'];
 
     try {
         proxySettings = await env.bpb.get("proxySettings", {type: 'json'});
@@ -1141,7 +1141,7 @@ const getFragmentConfigs = async (env, hostName, client) => {
         bestPing.inbounds[1].port = 2081;
         bestPing.inbounds[2].port = 6450;
     }
-    
+
     let bestFragment = structuredClone(xrayConfigTemp);
     bestFragment.remarks = '💦 BPB Frag - Best Fragment 😎';
     bestFragment.dns = await buildDNSObject(remoteDNS, localDNS, blockAds, bypassIran, blockPorn);
