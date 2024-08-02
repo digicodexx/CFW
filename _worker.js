@@ -824,39 +824,57 @@ const getLoadBalanceConfigs = async (env, hostName) => {
 
     ports.forEach(port => {
         let normalConfig = {
-            // ... (keep the existing normalConfig structure)
+            tag: `💦 CFW LB - PORT ${port} 🚀`,
+            protocol: "vless",
+            settings: {
+                vnext: []
+            },
+            streamSettings: {
+                network: "ws",
+                security: "tls",
+                tlsSettings: {
+                    serverName: hostName
+                },
+                wsSettings: {
+                    path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2048`,
+                    headers: {
+                        Host: hostName
+                    }
+                }
+            }
         };
 
         let fragConfig = JSON.parse(JSON.stringify(normalConfig));
-        fragConfig.outbounds[0].settings.fragment = {
+        fragConfig.tag = `💦 CFW LB - FRAG - PORT ${port} 🚀`;
+        fragConfig.settings.fragment = {
             packets: "tlshello",
             length: "100-200",
             interval: "5-10"
         };
 
-        Addresses.forEach((addr, index) => {
+        Addresses.forEach((addr) => {
             let outbound = {
                 address: addr,
                 port: parseInt(port),
                 users: [{ id: userID, encryption: "none" }]
             };
-            normalConfig.outbounds[0].settings.vnext.push(outbound);
-            fragConfig.outbounds[0].settings.vnext.push(outbound);
+            normalConfig.settings.vnext.push(outbound);
+            fragConfig.settings.vnext.push(outbound);
         });
 
         balancerConfigs.push(
             {
-                tag: `💦 CFW LB - PORT ${port} 🚀`,
+                tag: normalConfig.tag,
                 config: {
                     ...normalConfig,
-                    remarks: `💦 CFW LB - PORT ${port} 🚀`
+                    remarks: normalConfig.tag
                 }
             },
             {
-                tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
+                tag: fragConfig.tag,
                 config: {
                     ...fragConfig,
-                    remarks: `💦 CFW LB - FRAG - PORT ${port} 🚀`
+                    remarks: fragConfig.tag
                 }
             }
         );
@@ -864,6 +882,7 @@ const getLoadBalanceConfigs = async (env, hostName) => {
 
     return balancerConfigs;
 }
+
 
 
 
