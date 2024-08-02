@@ -55,9 +55,10 @@ export default {
                         const normalConfigs = await getNormalConfigs(env, host, client);
                         return new Response(normalConfigs, { status: 200 });        
                         
+
                     case `/balancersub/${userID}`:
                         const balancerConfigs = await getLoadBalanceConfigs(env, host);
-                        return new Response(balancerConfigs, { 
+                        return new Response(JSON.stringify(balancerConfigs, null, 2), { 
                             status: 200,
                             headers: { 'Content-Type': 'application/json' }
                         });
@@ -872,8 +873,9 @@ const getLoadBalanceConfigs = async (env, hostName) => {
         balancerConfigs.push(normalConfig, fragConfig);
     });
 
-    return JSON.stringify(balancerConfigs, null, 2);
+    return balancerConfigs;
 }
+
 
 
 
