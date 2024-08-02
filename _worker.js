@@ -823,65 +823,108 @@ const getLoadBalanceConfigs = async (env, hostName) => {
     const Addresses = cleanIPs ? cleanIPs.split(',') : [];
 
     ports.forEach(port => {
-        let normalConfig = {
-            tag: `💦 CFW LB - PORT ${port} 🚀`,
-            protocol: "vless",
-            settings: {
-                vnext: []
+        let config = {
+            log: {
+                loglevel: "warning"
             },
-            streamSettings: {
-                network: "ws",
-                security: "tls",
-                tlsSettings: {
-                    serverName: hostName
-                },
-                wsSettings: {
-                    path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2048`,
-                    headers: {
-                        Host: hostName
+            inbounds: [
+                {
+                    port: 10808,
+                    protocol: "socks",
+                    settings: {
+                        auth: "noauth",
+                        udp: true
                     }
+                },
+                {
+                    port: 10809,
+                    protocol: "http"
                 }
+            ],
+            outbounds: [],
+            routing: {
+                balancers: [
+                    {
+                        tag: "balancer",
+                        selector: [],
+                        strategy: {
+                            type: "leastPing"
+                        }
+                    }
+                ],
+                rules: [
+                    {
+                        type: "field",
+                        balancerTag: "balancer",
+                        network: "tcp,udp"
+                    }
+                ]
             }
         };
 
-        let fragConfig = JSON.parse(JSON.stringify(normalConfig));
-        fragConfig.tag = `💦 CFW LB - FRAG - PORT ${port} 🚀`;
-        fragConfig.settings.fragment = {
-            packets: "tlshello",
-            length: "100-200",
-            interval: "5-10"
-        };
-
-        Addresses.forEach((addr) => {
+        Addresses.forEach((addr, index) => {
             let outbound = {
-                address: addr,
-                port: parseInt(port),
-                users: [{ id: userID, encryption: "none" }]
+                protocol: "vless",
+                settings: {
+                    vnext: [
+                        {
+                            address: addr,
+                            port: parseInt(port),
+                            users: [
+                                {
+                                    id: userID,
+                                    encryption: "none"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                streamSettings: {
+                    network: "ws",
+                    security: "tls",
+                    tlsSettings: {
+                        serverName: randomUpperCase(hostName),
+                        alpn: ["h2", "http/1.1"],
+                        fingerprint: "randomized"
+                    },
+                    wsSettings: {
+                        path: `/${getRandomPath(16)}${proxyIP ? `/${encodeURIComponent(btoa(proxyIP))}` : ''}?ed=2560`,
+                        headers: {
+                            Host: randomUpperCase(hostName)
+                        }
+                    }
+                },
+                tag: `server${index + 1}`
             };
-            normalConfig.settings.vnext.push(outbound);
-            fragConfig.settings.vnext.push(outbound);
+
+            config.outbounds.push(outbound);
+            config.routing.balancers[0].selector.push(`server${index + 1}`);
         });
 
         balancerConfigs.push(
             {
-                tag: normalConfig.tag,
-                config: {
-                    ...normalConfig,
-                    remarks: normalConfig.tag
-                }
+                tag: `💦 CFW LB - PORT ${port} 🚀`,
+                config: config
             },
             {
-                tag: fragConfig.tag,
-                config: {
-                    ...fragConfig,
-                    remarks: fragConfig.tag
-                }
+                tag: `💦 CFW LB - FRAG - PORT ${port} 🚀`,
+                config: JSON.parse(JSON.stringify(config))
             }
         );
+
+        // Add fragment settings to the second config
+        balancerConfigs[balancerConfigs.length - 1].config.outbounds.forEach(outbound => {
+            outbound.settings.fragment = {
+                packets: "tlshello",
+                length: "100-200",
+                interval: "5-10"
+            };
+        });
     });
 
     return balancerConfigs;
 }
+
 
 
 
